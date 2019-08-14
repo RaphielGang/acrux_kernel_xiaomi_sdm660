@@ -4854,6 +4854,12 @@ static int __mdss_fb_copy_destscaler_data(struct fb_info *info,
 		commit->commit_v1.dest_scaler;
 	data_size = commit->commit_v1.dest_scaler_cnt *
 		sizeof(struct mdp_destination_scaler_data);
+	ds_data = kzalloc(data_size, GFP_KERNEL);
+	if (!ds_data) {
+		ret = -ENOMEM;
+		goto err;
+	}
+
 	ret = copy_from_user(ds_data, ds_data_user, data_size);
 	if (ret) {
 		pr_err("dest scaler data copy from user failed\n");
@@ -4865,11 +4871,24 @@ static int __mdss_fb_copy_destscaler_data(struct fb_info *info,
 	for (i = 0; i < commit->commit_v1.dest_scaler_cnt; i++) {
 		scale_data = NULL;
 
-		scale_data_user = to_user_ptr(ds_data[i].scale);
-		ds_data[i].scale = to_user_u64(&scale_data[i]);
-		if (ds_data[i].flags & (MDP_DESTSCALER_SCALE_UPDATE |
-					MDP_DESTSCALER_ENHANCER_UPDATE)) {
-			ret = copy_from_user(&scale_data[i], scale_data_user,
+		if (ds_data[i].scale) {
+			scale_data_user = to_user_ptr(ds_data[i].scale);
+			data_size = sizeof(struct mdp_scale_data_v2);
+
+			scale_data = kzalloc(data_size, GFP_KERNEL);
+			if (!scale_data) {
+				ds_data[i].scale = 0;
+				ret = -ENOMEM;
+				goto err;
+			}
+
+			ds_data[i].scale = to_user_u64(scale_data);
+		}
+
+		if (scale_data && (ds_data[i].flags &
+					(MDP_DESTSCALER_SCALE_UPDATE |
+					MDP_DESTSCALER_ENHANCER_UPDATE))) {
+			ret = copy_from_user(scale_data, scale_data_user,
 					data_size);
 			if (ret) {
 				pr_err("scale data copy from user failed\n");
